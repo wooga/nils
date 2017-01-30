@@ -1,4 +1,4 @@
-# Nils: orchestrating long running migrations
+# Nils: orchestrating long running migrations in ELixir
 
 Nils coordinates different and distributed parts of a system so that migrations/updates with complex transitions are performed in a way that the outside behaviour of the system stays consistent.
 
@@ -137,6 +137,7 @@ iex(13)> Nils.Server.status(:nils_server)
 Nils' state machine performs its duty cycle through state transitions that are either triggered externally by the app (`External`),
 internally (`Manager/FSM`) or implicitly by the callback modules returning (`Callback Modules`).
 
+```
 **************************************************************************
 *                                                                        *
 *   External          Manager/FSM               Callback Modules         *
@@ -173,3 +174,4 @@ internally (`Manager/FSM`) or implicitly by the callback modules returning (`Cal
 *                     '--------------------'                             *
 *                                                                        *
 **************************************************************************
+```
