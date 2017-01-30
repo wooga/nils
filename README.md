@@ -2,7 +2,7 @@
 
 Nils coordinates different and distributed parts of a system so that migrations/updates with complex transitions are performed in a way that the outside behaviour of the system stays consistent.
 
-## Live cycle
+## Life cycle
 
 A migration is the only way to align all the participating migrants. So naturally the initial setup is also a migration.
 Since the migrants might live on remote nodes they might not be available at the time when the Nils server starts.
