@@ -1,4 +1,4 @@
-# Nils: orchestrating long running migrations in ELixir
+# Nils: orchestrating long running migrations in Elixir
 
 Nils coordinates different and distributed parts of a system so that migrations/updates with complex transitions are performed in a way that the outside behaviour of the system stays consistent.
 
