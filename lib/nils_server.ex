@@ -192,7 +192,7 @@ defmodule Nils.Server do
   def call(migrant, method, args, timeout \\ :infinity) do
    case :rpc.call(migrant.node, migrant.callback, method, args, timeout) do
       {:badrpc, :timeout} ->
-        {:error, :timeou}
+        {:error, :timeout}
       reply ->
         reply
    end
