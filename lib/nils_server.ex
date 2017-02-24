@@ -154,7 +154,7 @@ defmodule Nils.Server do
     nil
   end
   def migrant_status(migrant, migrant_state) do
-    case call(migrant, :status, [migrant_state]) do
+    case call(migrant, :status, [migrant_state], 1000) do
       {:badrpc, _reason} -> :error
       result             -> result
     end
@@ -189,8 +189,13 @@ defmodule Nils.Server do
     {next_state, next_data}
   end
 
-  def call(migrant, method, args) do
-   :rpc.call(migrant.node, migrant.callback, method, args, :infinity)
+  def call(migrant, method, args, timeout \\ :infinity) do
+   case :rpc.call(migrant.node, migrant.callback, method, args, timeout) do
+      {:badrpc, :timeout} ->
+        {:error, :timeou}
+      reply ->
+        reply
+   end
   end
 
   def call!(migrant, method, args) do
