@@ -50,11 +50,11 @@ defmodule NilsServerTest do
     assert is_pid(server)
     assert :ok == Server.refresh(:test_server)
     assert TestHelper.wait_for(fn() -> :running == Server.status(:test_server).state end)
-    status = %{state: :running, queue: [], migrant_states: %{%Nils.Migrant{callback: VanillaMigrant, node: :nonode@nohost, type: :test, internal_ref: ref} => %{current: :destination_version_init, next: nil}}}
+    status = %{state: :running, queue: [], current_version: :destination_version_init, destination_version: nil, migrant_states: %{%Nils.Migrant{callback: VanillaMigrant, node: :nonode@nohost, type: :test, internal_ref: ref} => %{current: :destination_version_init, next: nil}}}
     assert status == Server.status(:test_server)
     assert :ok == Server.migrate(:destination_version1, :test_server)
     assert TestHelper.wait_for(fn() -> :running == Server.status(:test_server).state end)
-    status = %{state: :running, queue: [], migrant_states: %{%Nils.Migrant{callback: VanillaMigrant, node: :nonode@nohost, type: :test, internal_ref: ref} => %{current: :destination_version1, next: nil}}}
+    status = %{state: :running, queue: [], current_version: :destination_version1, destination_version: nil, migrant_states: %{%Nils.Migrant{callback: VanillaMigrant, node: :nonode@nohost, type: :test, internal_ref: ref} => %{current: :destination_version1, next: nil}}}
     assert status == Server.status(:test_server)
   end
 
@@ -71,6 +71,8 @@ defmodule NilsServerTest do
     assert TestHelper.wait_for(fn() -> :running == Server.status(:test_server).state end)
     assert [] == Server.status(:test_server).queue
     status = %{state: :running,
+              current_version: :destination_version3,
+              destination_version: nil,
               migrant_states: %{
                 %Nils.Migrant{callback: VanillaMigrant, node: :nonode@nohost, type: :test, internal_ref: ref} =>
                   %{current: :destination_version3, next: nil}
@@ -94,6 +96,8 @@ defmodule NilsServerTest do
     status = %{
               state: :initializing,
               queue: [],
+              current_version: nil,
+              destination_version: :destination_version_init,
               migrant_states: %{
                 %Nils.Migrant{callback: ReportingMigrant,
                  node: :nonode@nohost,
@@ -115,6 +119,8 @@ defmodule NilsServerTest do
     status = %{
         state: :running,
         queue: [],
+        current_version: :destination_version_init,
+        destination_version: nil,
         migrant_states: %{
           %Nils.Migrant{callback: VanillaMigrant, node: :nonode@nohost, type: :test, internal_ref: vanilla_ref} => %{current: :destination_version_init, next: nil},
           %Nils.Migrant{callback: ReportingMigrant, node: :nonode@nohost, type: :test, internal_ref: reporting_ref} => %{current: :destination_version_init, next: nil}
@@ -127,6 +133,8 @@ defmodule NilsServerTest do
           (MapSet.new |> MapSet.put(%Nils.Migrant{callback: ReportingMigrant, node: :nonode@nohost, type: :test, internal_ref: reporting_ref}) |> MapSet.put(%Nils.Migrant{callback: VanillaMigrant, node: :nonode@nohost, type: :test, internal_ref: vanilla_ref}))
         },
         queue: [],
+        current_version: :destination_version_init,
+        destination_version: :destination_version1,
         migrant_states: %{
           %Nils.Migrant{callback: ReportingMigrant, node: :nonode@nohost, type: :test, internal_ref: reporting_ref} => %{current: :destination_version_init, next: :destination_version1},
           %Nils.Migrant{callback: VanillaMigrant, node: :nonode@nohost, type: :test, internal_ref: vanilla_ref} => %{current: :destination_version_init, next: :destination_version1}},
@@ -139,6 +147,8 @@ defmodule NilsServerTest do
     assert TestHelper.wait_for(fn() -> :running == Server.status(:test_server).state end)
     status =  %{state: :running,
         queue: [],
+        current_version: :destination_version1,
+        destination_version: nil,
         migrant_states: %{
           %Nils.Migrant{callback: VanillaMigrant, node: :nonode@nohost, type: :test, internal_ref: vanilla_ref} => %{current: :destination_version1, next: nil},
           %Nils.Migrant{callback: ReportingMigrant, node: :nonode@nohost, type: :test, internal_ref: reporting_ref} => %{current: :destination_version1, next: nil}

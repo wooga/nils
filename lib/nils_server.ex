@@ -11,7 +11,7 @@ defmodule Nils.Server do
 
   alias Nils.{Server, MigrantState, Migrant}
 
-  defstruct destination_version: nil, migrants: nil, migrant_states: %{}, queue: []
+  defstruct current_version: nil, destination_version: nil, migrants: nil, migrant_states: %{}, queue: []
 
   #--- API --------------------------------------------------------------------
 
@@ -59,6 +59,8 @@ defmodule Nils.Server do
     %{
       state: state,
       queue: data.queue,
+      current_version: data.current_version,
+      destination_version: data.destination_version,
       migrant_states:
         Enum.map(
           data.migrants,
@@ -77,7 +79,7 @@ defmodule Nils.Server do
   # receiving an migration call when idling -> migrating
   def handle_event({:call, from}, {:migrate, destination_version}, state, data) when state == :running or state == :initializing do
     Logger.info("migrating to #{inspect(destination_version)} after an outside call")
-    {next_state, next_data} = migrate_internal(destination_version, data)
+    {next_state, next_data} = trigger_migration(destination_version, data)
     {:next_state, next_state, next_data, [{:reply, from, :ok}]}
   end
   # receiving an migration call during a migration -> queueing
@@ -89,16 +91,16 @@ defmodule Nils.Server do
   # receiving an migration cast internally from a queued migration
   def handle_event(:cast, {:migrate, destination_version}, state, data) when state == :running do
     Logger.info("migrating to #{inspect(destination_version)} after an internal cast from a queued migration")
-    {next_state, next_data} = migrate_internal(destination_version, data)
+    {next_state, next_data} = trigger_migration(destination_version, data)
     {:next_state, next_state, next_data}
   end
 
   def handle_event({:call, from}, :refresh, state, data) when state == :running or state == :initializing do
     Logger.info("refreshing #{inspect(data.destination_version)}")
-    {next_state, next_data} = migrate_internal(data.destination_version, data)
+    {next_state, next_data} = trigger_migration(data.destination_version, data)
     {:next_state, next_state, next_data, [{:reply, from, :ok}]}
   end
-  def handle_event({:call, from}, :refresh, state, data) do
+  def handle_event({:call, from}, :refresh, state = {:migrating, _}, data) do
     Logger.info("not refreshing, migration in progress")
     {:next_state, state, data, [{:reply, from, :ok}]}
   end
@@ -130,7 +132,7 @@ defmodule Nils.Server do
       end
     )
     |> Enum.into(%{})
-    activated_data = %Server{data | migrant_states: next_migrant_states}
+    activated_data = %Server{data | migrant_states: next_migrant_states, current_version: data.destination_version, destination_version: nil}
     case data.queue do
       [] ->
         {:next_state, :running, activated_data}
@@ -160,7 +162,7 @@ defmodule Nils.Server do
     end
   end
 
-  def migrate_internal(destination_version, data) do
+  def trigger_migration(destination_version, data) do
     next_migrant_states =
     Enum.map(
       data.migrants,
