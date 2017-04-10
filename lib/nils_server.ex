@@ -15,17 +15,20 @@ defmodule Nils.Server do
 
   #--- API --------------------------------------------------------------------
 
-  def start_link(next_version, migrants = [%Migrant{}|_], {scope, name}) when scope == :local or scope == :global do
+  def start_link(next_versions, migrants = [%Migrant{}|_], {scope, name}) when is_list(next_versions) and (scope == :local or scope == :global) do
     migrants_unique = Enum.map(
       migrants,
       fn(%Migrant{internal_ref: nil} = migrant) ->
         %Migrant{migrant | internal_ref: make_ref()};
         (migrant) -> migrant
       end)
-    :gen_statem.start_link({scope, name}, __MODULE__, [next_version, migrants_unique], [])
+    :gen_statem.start_link({scope, name}, __MODULE__, [next_versions, migrants_unique], [])
   end
-  def start_link(next_version, migrants = [_|_], name) do
+  def start_link(next_version, migrants = [_|_], name) when is_list(next_version) do
     start_link(next_version, migrants, {:local, name})
+  end
+  def start_link(next_version, migrants, name) when not is_list(next_version) do
+    start_link([next_version], migrants, name)
   end
 
   def refresh(name) do
@@ -46,10 +49,11 @@ defmodule Nils.Server do
     :handle_event_function
   end
 
-  def init([next_version, migrants]) do
+  def init([[next_version | future_versions], migrants]) do
     init_data = %Server{
       migrants: migrants,
       next_version: next_version,
+      queue: future_versions
     }
     {:ok, :initializing, init_data}
   end
@@ -184,8 +188,8 @@ defmodule Nils.Server do
     |> Enum.into(%{})
 
     next_data  = %Server{data |
-      migrant_states:    next_migrant_states,
-      next_version: next_version,
+      migrant_states: next_migrant_states,
+      next_version:   next_version,
     }
     next_state = {:migrating, MapSet.new(data.migrants)}
     {next_state, next_data}

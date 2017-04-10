@@ -156,6 +156,29 @@ defmodule NilsServerTest do
     assert status == Server.status(:test_server)
   end
 
+  test "starting, queueing and refreshing" do
+    Process.register(self(), :test_process)
+    {reporting_ref, vanilla_ref} = {make_ref(), make_ref()}
+    {:ok, _} = Server.start_link(
+      [:next_version_init, :next_version_2],
+      [
+          %Migrant{type: :test, callback: VanillaMigrant,   internal_ref: vanilla_ref},
+          %Migrant{type: :test, callback: ReportingMigrant, internal_ref: reporting_ref}
+      ],
+    :test_server)
+    assert :initializing == Server.status(:test_server).state
+    assert :ok == Server.refresh(:test_server)
+    assert_receive {ReportingMigrant, :init}
+    assert_receive {ReportingMigrant, :migrate}
+    assert_receive {ReportingMigrant, :activate}
+    assert_receive {ReportingMigrant, :init}
+    assert_receive {ReportingMigrant, :migrate}
+    assert_receive {ReportingMigrant, :activate}
+    refute_receive _
+    assert TestHelper.wait_for(fn() -> :running == Server.status(:test_server).state end)
+    assert %{current_version: :next_version_2, next_version: nil} = Server.status(:test_server)
+  end
+
   test "large number of migrations" do
     migrants = for _ <- 1..1001, do: %Migrant{type: :test, callback: VanillaMigrant}
     {:ok, _} = Server.start_link(:next_version_init, migrants, :test_server)
