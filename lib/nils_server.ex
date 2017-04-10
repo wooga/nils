@@ -11,29 +11,29 @@ defmodule Nils.Server do
 
   alias Nils.{Server, MigrantState, Migrant}
 
-  defstruct current_version: nil, destination_version: nil, migrants: nil, migrant_states: %{}, queue: []
+  defstruct current_version: nil, next_version: nil, migrants: nil, migrant_states: %{}, queue: []
 
   #--- API --------------------------------------------------------------------
 
-  def start_link(destination_version, migrants = [%Migrant{}|_], {scope, name}) when scope == :local or scope == :global do
+  def start_link(next_version, migrants = [%Migrant{}|_], {scope, name}) when scope == :local or scope == :global do
     migrants_unique = Enum.map(
       migrants,
       fn(%Migrant{internal_ref: nil} = migrant) ->
         %Migrant{migrant | internal_ref: make_ref()};
         (migrant) -> migrant
       end)
-    :gen_statem.start_link({scope, name}, __MODULE__, [destination_version, migrants_unique], [])
+    :gen_statem.start_link({scope, name}, __MODULE__, [next_version, migrants_unique], [])
   end
-  def start_link(destination_version, migrants = [_|_], name) do
-    start_link(destination_version, migrants, {:local, name})
+  def start_link(next_version, migrants = [_|_], name) do
+    start_link(next_version, migrants, {:local, name})
   end
 
   def refresh(name) do
     :gen_statem.call(name, :refresh)
   end
 
-  def migrate(destination_version, name) do
-    :gen_statem.call(name, {:migrate, destination_version})
+  def migrate(next_version, name) do
+    :gen_statem.call(name, {:migrate, next_version})
   end
 
   def status(name) do
@@ -46,10 +46,10 @@ defmodule Nils.Server do
     :handle_event_function
   end
 
-  def init([destination_version, migrants]) do
+  def init([next_version, migrants]) do
     init_data = %Server{
       migrants: migrants,
-      destination_version: destination_version,
+      next_version: next_version,
     }
     {:ok, :initializing, init_data}
   end
@@ -60,7 +60,7 @@ defmodule Nils.Server do
       state: state,
       queue: data.queue,
       current_version: data.current_version,
-      destination_version: data.destination_version,
+      next_version: data.next_version,
       migrant_states:
         Enum.map(
           data.migrants,
@@ -77,27 +77,27 @@ defmodule Nils.Server do
   end
 
   # receiving an migration call when idling -> migrating
-  def handle_event({:call, from}, {:migrate, destination_version}, state, data) when state == :running or state == :initializing do
-    Logger.info("migrating to #{inspect(destination_version)} after an outside call")
-    {next_state, next_data} = trigger_migration(destination_version, data)
+  def handle_event({:call, from}, {:migrate, next_version}, state, data) when state == :running or state == :initializing do
+    Logger.info("migrating to #{inspect(next_version)} after an outside call")
+    {next_state, next_data} = trigger_migration(next_version, data)
     {:next_state, next_state, next_data, [{:reply, from, :ok}]}
   end
   # receiving an migration call during a migration -> queueing
-  def handle_event({:call, from}, {:migrate, destination_version}, state, data) do
-    Logger.info("queuing migration to #{inspect(destination_version)}")
-    next_data = %Server{data | queue: data.queue ++ [destination_version]}
+  def handle_event({:call, from}, {:migrate, next_version}, state, data) do
+    Logger.info("queuing migration to #{inspect(next_version)}")
+    next_data = %Server{data | queue: data.queue ++ [next_version]}
     {:next_state, state, next_data, [{:reply, from, :ok}]}
   end
   # receiving an migration cast internally from a queued migration
-  def handle_event(:cast, {:migrate, destination_version}, state, data) when state == :running do
-    Logger.info("migrating to #{inspect(destination_version)} after an internal cast from a queued migration")
-    {next_state, next_data} = trigger_migration(destination_version, data)
+  def handle_event(:cast, {:migrate, next_version}, state, data) when state == :running do
+    Logger.info("migrating to #{inspect(next_version)} after an internal cast from a queued migration")
+    {next_state, next_data} = trigger_migration(next_version, data)
     {:next_state, next_state, next_data}
   end
 
   def handle_event({:call, from}, :refresh, state, data) when state == :running or state == :initializing do
-    Logger.info("refreshing #{inspect(data.destination_version)}")
-    {next_state, next_data} = trigger_migration(data.destination_version, data)
+    Logger.info("refreshing #{inspect(data.next_version)}")
+    {next_state, next_data} = trigger_migration(data.next_version, data)
     {:next_state, next_state, next_data, [{:reply, from, :ok}]}
   end
   def handle_event({:call, from}, :refresh, state = {:migrating, _}, data) do
@@ -132,13 +132,13 @@ defmodule Nils.Server do
       end
     )
     |> Enum.into(%{})
-    activated_data = %Server{data | migrant_states: next_migrant_states, current_version: data.destination_version, destination_version: nil}
+    activated_data = %Server{data | migrant_states: next_migrant_states, current_version: data.next_version, next_version: nil}
     case data.queue do
       [] ->
         {:next_state, :running, activated_data}
-      [next_destination_version | queue_rest] ->
+      [next_next_version | queue_rest] ->
         next_data = %Server{activated_data | queue: queue_rest}
-        {:next_state, :running, next_data, [{:next_event, :cast, {:migrate, next_destination_version}}]}
+        {:next_state, :running, next_data, [{:next_event, :cast, {:migrate, next_next_version}}]}
     end
   end
 
@@ -162,13 +162,13 @@ defmodule Nils.Server do
     end
   end
 
-  def trigger_migration(destination_version, data) do
+  def trigger_migration(next_version, data) do
     next_migrant_states =
     Enum.map(
       data.migrants,
       fn(migrant) ->
         server = self()
-        init_migrant_state = call!(migrant, :init, [destination_version])
+        init_migrant_state = call!(migrant, :init, [next_version])
         spawn_link(
           fn() ->
             Logger.info("migrations requested: #{inspect(migrant)}")
@@ -185,7 +185,7 @@ defmodule Nils.Server do
 
     next_data  = %Server{data |
       migrant_states:    next_migrant_states,
-      destination_version: destination_version,
+      next_version: next_version,
     }
     next_state = {:migrating, MapSet.new(data.migrants)}
     {next_state, next_data}
