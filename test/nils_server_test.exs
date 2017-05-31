@@ -48,10 +48,17 @@ defmodule NilsServerTest do
     {:ok, server} = Server.start_link(:next_version_init, [%Migrant{type: :test, callback: VanillaMigrant, internal_ref: ref}], :test_server)
     assert :initializing == Server.status(:test_server).state
     assert is_pid(server)
+
     assert :ok == Server.refresh(:test_server)
     assert TestHelper.wait_for(fn() -> :running == Server.status(:test_server).state end)
     status = %{state: :running, queue: [], current_version: :next_version_init, next_version: nil, migrant_states: %{%Nils.Migrant{callback: VanillaMigrant, node: :nonode@nohost, type: :test, internal_ref: ref} => %{current: :next_version_init, next: nil}}}
     assert status == Server.status(:test_server)
+
+    assert :ok == Server.refresh(:test_server)
+    assert TestHelper.wait_for(fn() -> :running == Server.status(:test_server).state end)
+    status = %{state: :running, queue: [], current_version: :next_version_init, next_version: nil, migrant_states: %{%Nils.Migrant{callback: VanillaMigrant, node: :nonode@nohost, type: :test, internal_ref: ref} => %{current: :next_version_init, next: nil}}}
+    assert status == Server.status(:test_server)
+
     assert :ok == Server.migrate(:next_version1, :test_server)
     assert TestHelper.wait_for(fn() -> :running == Server.status(:test_server).state end)
     status = %{state: :running, queue: [], current_version: :next_version1, next_version: nil, migrant_states: %{%Nils.Migrant{callback: VanillaMigrant, node: :nonode@nohost, type: :test, internal_ref: ref} => %{current: :next_version1, next: nil}}}
