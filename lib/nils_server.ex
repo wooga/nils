@@ -132,7 +132,9 @@ defmodule Nils.Server do
       data.migrants,
       fn(migrant) ->
         migrant_state = Map.get(data.migrant_states, migrant)
+        Logger.info("activation requested: #{inspect(migrant)}")
         activated_migrant_state = call!(migrant, :activate, [migrant_state.next])
+        Logger.info("activation complete: #{inspect(migrant)}")
         {migrant, %MigrantState{migrant_state | next: nil, current: activated_migrant_state}}
       end
     )
