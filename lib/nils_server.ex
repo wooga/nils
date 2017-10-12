@@ -100,8 +100,8 @@ defmodule Nils.Server do
   end
 
   def handle_event({:call, from}, :refresh, state, data) when state == :running or state == :initializing do
-    Logger.info("refreshing #{inspect(data.next_version)}")
     target_version = data.current_version || data.next_version
+    Logger.info("refreshing #{inspect(target_version)}")
     {next_state, next_data} = trigger_migration(target_version, data)
     {:next_state, next_state, next_data, [{:reply, from, :ok}]}
   end
